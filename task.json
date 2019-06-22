@@ -1,0 +1,62 @@
+{
+    "id": "{{taskguid}}",
+    "name": "CreateRelease",
+    "friendlyName": "Create Release",
+    "description": "Creates a release in Azure Devops using the currently deplopyed artifact in a given environment",
+    "helpMarkDown": "",
+    "category": "Utility",
+    "author": "A. Assadourian & S. Mooren",
+    "version": {
+        "Major": 0,
+        "Minor": 1,
+        "Patch": 0
+    },
+    "instanceNameFormat": "Echo $(samplestring)",
+    "inputs": [
+        {
+            "name": "ProjectName",
+            "type": "string",
+            "label": "Project name",
+            "defaultValue": "",
+            "required": true,
+            "helpMarkDown": "The name of the project"
+        },
+        {
+            "name": "ReleaseName",
+            "type": "string",
+            "label": "Release name",
+            "defaultValue": "",
+            "required": true,
+            "helpMarkDown": "The name of the release pipeline"
+        },
+        {
+            "name": "ArtifactEnvironment",
+            "type": "string",
+            "label": "Artifact environment",
+            "defaultValue": "",
+            "required": true,
+            "helpMarkDown": "The name of the environment to get the currently deployed artifact from"
+        },
+        {
+            "name": "Environment",
+            "type": "string",
+            "label": "Environment",
+            "defaultValue": "",
+            "required": true,
+            "helpMarkDown": "The environment to deploy"
+        },
+        {
+            "name": "Attributes",
+            "type": "string",
+            "label": "Attributes",
+            "defaultValue": "",
+            "required": true,
+            "helpMarkDown": "Attributes to provide as input variables when creating the release"
+        }
+    ],
+    "execution": {
+        "Node": {
+            "target": "index.js"
+        }
+    }
+}
