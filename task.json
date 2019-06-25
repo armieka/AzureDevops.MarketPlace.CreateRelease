@@ -1,25 +1,29 @@
 {
-    "id": "{{taskguid}}",
+    "id": "fae4ddec-c386-4bed-87ef-750129f8be0a",
     "name": "CreateRelease",
     "friendlyName": "Create Release",
     "description": "Creates a release in Azure Devops using the currently deplopyed artifact in a given environment",
     "helpMarkDown": "",
     "category": "Utility",
-    "author": "A. Assadourian & S. Mooren",
+    "author": "S. Mooren & A. Assadourian",
     "version": {
         "Major": 0,
         "Minor": 1,
         "Patch": 0
     },
-    "instanceNameFormat": "Echo $(samplestring)",
     "inputs": [
         {
             "name": "ProjectName",
-            "type": "string",
-            "label": "Project name",
+            "type": "pickList",
+            "label": "Project",
             "defaultValue": "",
             "required": true,
-            "helpMarkDown": "The name of the project"
+            "visibleRule": "buildType == specific",
+            "properties": {
+                "EditableOptions": "True",
+                "DisableManageLink": "True"
+            },
+            "helpMarkDown": "The name of the project you want to release"
         },
         {
             "name": "ReleaseName",
@@ -54,9 +58,21 @@
             "helpMarkDown": "Attributes to provide as input variables when creating the release"
         }
     ],
+    "dataSourceBindings": [
+        {
+            "endpointId": "tfs:teamfoundation",
+            "target": "ProjectName",
+            "endpointUrl": "{{endpoint.url}}/_apis/projects?$skip={{skip}}&$top=1000",
+            "resultSelector": "jsonpath:$.value[?(@.state=='wellFormed')]",
+            "resultTemplate": "{ \"Value\" : \"{{{id}}}\", \"DisplayValue\" : \"{{{name}}}\" }",
+            "callbackContextTemplate": "{\"skip\": \"{{add skip 1000}}\"}",
+            "callbackRequiredTemplate": "{{isEqualNumber result.count 1000}}",
+            "initialContextTemplate": "{\"skip\": \"0\"}"
+        }
+    ],
     "execution": {
-        "Node": {
-            "target": "index.js"
+        "PowerShell3": {
+            "target": "CreateRelease.ps1"
         }
     }
 }
