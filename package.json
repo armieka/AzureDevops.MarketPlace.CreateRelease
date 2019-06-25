@@ -9,7 +9,9 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "azure-pipelines-task-lib": "^2.8.0"
+    "azure-pipelines-task-lib": "^2.8.0",
+    "es6-promise": "^4.2.8",
+    "ts-promise": "^2.1.0"
   },
   "devDependencies": {
     "@types/node": "^12.0.10",

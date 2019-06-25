@@ -71,8 +71,8 @@
         }
     ],
     "execution": {
-        "PowerShell3": {
-            "target": "CreateRelease.ps1"
+        "Node": {
+            "target": "index.js"
         }
     }
 }
