@@ -35,17 +35,12 @@ async function GetEnvironments(headers: HeadersInit, projectName: string, defini
             }
             throw Error(response.statusText);
         }).then(function (jsonResult) {
-             let environments = jsonResult.environments.map(function (environment: any) {
+             return jsonResult.environments.reduce(function (x: string, environment: any) {
                 if(environment.name != environmentName){
-                    return '\"' + environment.name + '\"';
-                }
-            }).reduce(function (x: string, y: string) {
-                if(y){
-                    return x + ',' + y;
+                    return x + ',' + '\"' + environment.name + '\"';
                 }
                 return x;
-            });
-            return (environments) ? environments : '';
+            }, "");
         });
 }
 
