@@ -35,19 +35,17 @@ async function GetBuildArtifactAsync(headers: HeadersInit, projectName: string, 
             }
             throw Error(response.statusText);
         }).then(function (jsonResult) {
-            return jsonResult.value.reduce(function (x: string, deploymentType: any) {
-                if (deploymentType.releaseEnvironment.name == 'production') {
-                    let artifacts = '"artifacts": [' + deploymentType.release.artifacts.map(function (artifact: any) {
-                        return '{ "alias": "' + artifact.alias + '",' +
-                            '"instanceReference": {' +
-                            '"name": "' + artifact.name + '",' +
-                            '"id": "' + artifact.id + '"}' +
-                            '}';
-                    }).join(',') + ']';
-                    return artifacts;
-                }
-                return x;
-            }, "");
+            let result=jsonResult.value.reduce(function (artifacts: {[name:string]: string}, deploymentType: any) {
+                artifacts[deploymentType.releaseEnvironment.name.toLowerCase()] = '"artifacts": [' + deploymentType.release.artifacts.map(function (artifact: any) {
+                    return '{ "alias": "' + artifact.alias + '",' +
+                        '"instanceReference": {' +
+                        '"name": "' + artifact.definitionReference.version.name + '",' +
+                        '"id": "' + artifact.definitionReference.version.id + '"}' +
+                        '}';
+                }).join(',') + ']';
+                return artifacts;
+            }, {});
+            return result['production']; //should be set by user either via ui dropdown see release in normal flow or typed
         });
 }
 
@@ -190,12 +188,19 @@ async function run() {
         const projectName: string = taskLib.getInput('ProjectName', true);
         const releaseName: string = taskLib.getInput('ReleaseName', true);
         //const artifactEnvironment: string = taskLib.getInput('ArtifactEnvironment', true);
-        const environment: string = taskLib.getInput('Environment', true);
+        //const environment: string = taskLib.getInput('Environment', true);
+        const personalAccesToken: string = taskLib.getInput('personalAccesToken', true);
         const attributes: { [id: string]: string } = {};//taskLib.getInput('Attributes', true);
-        let token = Buffer.from(':').toString('base64')
-        let headers: any = { 'Authorization': 'Basic ' + token };
-        let releaseId = await CreateReleaseAsync(headers, projectName, releaseName, attributes, environment);
-        await WaitForReleaseToFinishAsync(headers, projectName, releaseId, environment);
+        let token = Buffer.from(':' + personalAccesToken).toString('base64')
+        let headers: Headers = new Headers();
+        headers.set('Authorization', 'Basic ' + token);
+        // let releaseId = await CreateReleaseAsync(headers, projectName, releaseName, attributes, environment);
+        // await WaitForReleaseToFinishAsync(headers, projectName, releaseId, environment);
+        headers.set('Content-Type', 'application/json');
+        let definitionId = await GetDefinitionIdAsync(headers, projectName, releaseName);
+        let buildArtifact = await GetBuildArtifactAsync(headers, projectName, definitionId);
+        console.log(definitionId);
+        console.log(buildArtifact);
     }
     catch (err) {
         taskLib.setResult(taskLib.TaskResult.Failed, err.message);
