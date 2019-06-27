@@ -24,6 +24,34 @@ async function GetDefinitionIdAsync(headers: HeadersInit, projectName: string, r
         });
 }
 
+async function GetBuildArtifactAsync(headers: HeadersInit, projectName: string, definitionId: number): Promise<string> {
+
+    let x = fetch('https://vsrm.dev.azure.com/beslistnl/' + projectName + '/_apis/release/deployments?api-version=5.0&query+Order=descending&deploymentStatus=succeeded&definitionId=' + definitionId,
+        {
+            headers: headers,
+            method: 'GET'
+        }).then(function (response) {
+            if (response.ok) {
+                return response.json();
+            }
+            throw Error(response.statusText);
+        }).then(function (jsonResult) {
+            return jsonResult.value.reduce(function (x: string, deploymentType: any) {
+                if (deploymentType.releaseEnvironment.name == 'production') {
+                    let artifacts = '"artifacts": [' + deploymentType.release.artifacts.map(function (artifact: any) {
+                        return '{ "alias": "' + artifact.alias + '",' +
+                            '"instanceReference": {' +
+                            '"name": "' + artifact.name + '",' +
+                            '"id": "' + artifact.id + '"}' +
+                            '}';
+                    }).join(',') + ']';
+                    return artifacts;
+                }
+                return x;
+            }, "");
+        });
+}
+
 async function GetEnvironmentsAsync(headers: HeadersInit, projectName: string, definitionId: number, environmentName: string): Promise<string> {
 
     return fetch('https://vsrm.dev.azure.com/beslistnl/' + projectName + '/_apis/Release/definitions/' + definitionId + '?api-version=5.0',
@@ -66,7 +94,7 @@ async function CreateReleaseAsync(headers: Headers, projectName: string, release
 
     headers.set('Content-Type', 'application/json');
     let definitionId = await GetDefinitionIdAsync(headers, projectName, releaseName);
-    let buildArtifact = await GetBuildArtifactAsync(headers, definitionId, projectName);
+    let buildArtifact = await GetBuildArtifactAsync(headers, projectName, definitionId);
     let environments = await GetEnvironmentsAsync(headers, projectName, definitionId, userDefinedEnvironment);
     let releaseBody = CreateReleaseBody(definitionId, environments, buildArtifact, attributes);
     return fetch('https://vsrm.dev.azure.com/beslistnl/' + projectName + '/_apis/release/releases?api-version=5.0',
