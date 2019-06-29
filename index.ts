@@ -25,7 +25,7 @@ async function GetDefinitionIdAsync(headers: HeadersInit, projectName: string, r
 }
 
 async function GetBuildArtifactAsync(headers: HeadersInit, projectName: string, definitionId: number): Promise<string> {
-    return fetch('https://vsrm.dev.azure.com/beslistnl/' + projectName + '/_apis/release/deployments?api-version=5.0&query+Order=descending&deploymentStatus=succeeded&definitionId=' + definitionId,
+    let result = await fetch('https://vsrm.dev.azure.com/beslistnl/' + projectName + '/_apis/release/deployments?api-version=5.0&query+Order=descending&deploymentStatus=succeeded&definitionId=' + definitionId,
         {
             headers: headers,
             method: 'GET'
@@ -35,8 +35,8 @@ async function GetBuildArtifactAsync(headers: HeadersInit, projectName: string, 
             }
             throw Error(response.statusText);
         }).then(function (jsonResult) {
-            let result=jsonResult.value.reduce(function (artifacts: {[name:string]: string}, deploymentType: any) {
-                artifacts[deploymentType.releaseEnvironment.name.toLowerCase()] = '"artifacts": [' + deploymentType.release.artifacts.map(function (artifact: any) {
+            let result: { [name: string]: string } = jsonResult.value.reduce(function (artifacts: { [name: string]: string }, deploymentType: any) {
+                artifacts[deploymentType.releaseEnvironment.name] = '"artifacts": [' + deploymentType.release.artifacts.map(function (artifact: any) {
                     return '{ "alias": "' + artifact.alias + '",' +
                         '"instanceReference": {' +
                         '"name": "' + artifact.definitionReference.version.name + '",' +
@@ -45,8 +45,9 @@ async function GetBuildArtifactAsync(headers: HeadersInit, projectName: string, 
                 }).join(',') + ']';
                 return artifacts;
             }, {});
-            return result['production']; //should be set by user either via ui dropdown see release in normal flow or typed
+            return result;
         });
+    return result[Object.keys(result)[0]] ? result[Object.keys(result)[0]] : "\"artifacts\": []";//return specified environment
 }
 
 async function GetEnvironmentsAsync(headers: HeadersInit, projectName: string, definitionId: number, environmentName: string): Promise<string> {
@@ -61,12 +62,12 @@ async function GetEnvironmentsAsync(headers: HeadersInit, projectName: string, d
             }
             throw Error(response.statusText);
         }).then(function (jsonResult) {
-            return jsonResult.environments.reduce(function (x: string, environment: any) {
+            return jsonResult.environments.reduce(function (x: string[], environment: any) {
                 if (environment.name != environmentName) {
-                    return x + ',' + '\"' + environment.name + '\"';
+                    x.push('\"' + environment.name + '\"');
                 }
                 return x;
-            }, "");
+            }, []).join(',');
         });
 }
 
@@ -79,17 +80,16 @@ function CreateReleaseBody(definitionId: number, manualEnvironments: string, art
     }, []).join(',') + '}';
     let description = 'triggered by integration test';
     return '{"definitionId": ' + definitionId + ',' +
-        ',"description": "' + description + '",' +
+        '"description": "' + description + '",' +
         artifact + ',' +
         variables + ',' +
         '"isDraft": false,' +
         '"reason": "none",' +
-        '"manualEnvironments": ["' + manualEnvironments + '"]}';
+        '"manualEnvironments": [' + manualEnvironments + ']}';
 }
 
 async function CreateReleaseAsync(headers: Headers, projectName: string, releaseName: string, attributes: { [id: string]: string }, userDefinedEnvironment: string): Promise<number> {
 
-    headers.set('Content-Type', 'application/json');
     let definitionId = await GetDefinitionIdAsync(headers, projectName, releaseName);
     let buildArtifact = await GetBuildArtifactAsync(headers, projectName, definitionId);
     let environments = await GetEnvironmentsAsync(headers, projectName, definitionId, userDefinedEnvironment);
@@ -124,7 +124,7 @@ async function WaitForReleaseToFinishAsync(headers: Headers, projectName: string
                 }
                 throw Error(response.statusText);
             }).then(function (jsonResult) {
-                return jsonResult.environments.foreach(async function (environment: any) {
+                return jsonResult.environments.reduce(async function (x: boolean, environment: any) {
                     if (environment.name == userDefinedEnvironment) {
                         let status = environment.status;
                         if (status == 'notStarted') {
@@ -134,11 +134,11 @@ async function WaitForReleaseToFinishAsync(headers: Headers, projectName: string
                             await delay(3000);
                         }
                         else {
-                            return true;
+                            x = true;
                         }
                     }
-                    return false;
-                });
+                    return x;
+                }, false);
             });
     }
 }
@@ -155,17 +155,15 @@ async function GetReleaseEnvironmentIdAsync(headers: Headers, projectName: strin
             }
             throw Error(response.statusText);
         }).then(function (jsonResult) {
-            return jsonResult.environments.foreach(function (environment: any) {
-                if (environment == userDefinedEnvironment) {
-                    return environment.id;
-                }
-            });
+            return jsonResult.environments.reduce(function (x: { [id: string]: string }, environment: any) {
+                x[environment.name] = environment.id;
+                return x;
+            }, {})[userDefinedEnvironment];
         });
 }
 
 async function StartNotStartedEnvironmentAsync(headers: Headers, projectName: string, releaseId: number, userDefinedEnvironment: string) {
 
-    headers.set('Content-Type', 'application/json');
     let environmentId = await GetReleaseEnvironmentIdAsync(headers, projectName, releaseId, userDefinedEnvironment);
     let releaseBody = '{"status": "inProgress",' +
         '"scheduledDeploymentTime": null,' +
@@ -178,6 +176,7 @@ async function StartNotStartedEnvironmentAsync(headers: Headers, projectName: st
         }).then(async function (response) {
             if (response.ok) {
                 await delay(3000);
+                return;
             }
             throw Error(response.statusText);
         });
@@ -188,19 +187,15 @@ async function run() {
         const projectName: string = taskLib.getInput('ProjectName', true);
         const releaseName: string = taskLib.getInput('ReleaseName', true);
         //const artifactEnvironment: string = taskLib.getInput('ArtifactEnvironment', true);
-        //const environment: string = taskLib.getInput('Environment', true);
+        const userDefinedEnvironment: string = taskLib.getInput('Environment', true);
         const personalAccesToken: string = taskLib.getInput('personalAccesToken', true);
         const attributes: { [id: string]: string } = {};//taskLib.getInput('Attributes', true);
         let token = Buffer.from(':' + personalAccesToken).toString('base64')
         let headers: Headers = new Headers();
         headers.set('Authorization', 'Basic ' + token);
-        // let releaseId = await CreateReleaseAsync(headers, projectName, releaseName, attributes, environment);
-        // await WaitForReleaseToFinishAsync(headers, projectName, releaseId, environment);
         headers.set('Content-Type', 'application/json');
-        let definitionId = await GetDefinitionIdAsync(headers, projectName, releaseName);
-        let buildArtifact = await GetBuildArtifactAsync(headers, projectName, definitionId);
-        console.log(definitionId);
-        console.log(buildArtifact);
+        let releaseId = await CreateReleaseAsync(headers, projectName, releaseName, attributes, userDefinedEnvironment);
+        await WaitForReleaseToFinishAsync(headers, projectName, releaseId, userDefinedEnvironment);
     }
     catch (err) {
         taskLib.setResult(taskLib.TaskResult.Failed, err.message);
