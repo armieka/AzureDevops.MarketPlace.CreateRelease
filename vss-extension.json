@@ -17,5 +17,17 @@
     ],
     "icons": {
         "default": "icon.png"        
-    }
+    },
+    "contributions": [
+        {
+            "id": "run-release-task",
+            "type": "ms.vss-distributed-task.task",
+            "targets": [
+                "ms.vss-distributed-task.tasks"
+            ],
+            "properties": {
+                "name": "CreateRelease"
+            }
+        }
+    ]
 }
