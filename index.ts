@@ -189,7 +189,7 @@ async function run() {
         //const artifactEnvironment: string = taskLib.getInput('ArtifactEnvironment', true);
         const userDefinedEnvironment: string = taskLib.getInput('Environment', true);
         const personalAccesToken: string = taskLib.getInput('personalAccesToken', true);
-        const attributes: { [id: string]: string } = {};//taskLib.getInput('Attributes', true);
+        const attributes: { [id: string]: string } = JSON.parse(taskLib.getInput('Attributes', true));
         let token = Buffer.from(':' + personalAccesToken).toString('base64')
         let headers: Headers = new Headers();
         headers.set('Authorization', 'Basic ' + token);
