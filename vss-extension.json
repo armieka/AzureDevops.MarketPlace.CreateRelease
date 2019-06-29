@@ -4,19 +4,24 @@
     "name": " Tool to create a release",
     "tags": ["pipeline", "deploy", "release"],
     "version": "0.0.1",
-    "publisher": "{{same as created https://docs.microsoft.com/en-us/azure/devops/extend/publish/overview?view=azure-devops}}",
+    "publisher": "SietseMoorenBeslist",
     "targets": [
         {
             "id": "Microsoft.VisualStudio.Services.Cloud"
         }
-    ],   
+    ],  
+    "files": [
+        {
+            "path": "CreateRelease"
+        }
+    ], 
     "scopes": ["vso.build", "vso.project", "vso.release_execute" ],
     "description": "Creates a release in Azure Devops using the currently deplopyed artifact in a given environment.",
     "categories": [
         "Azure Pipelines"
     ],
     "icons": {
-        "default": "icon.png"        
+        "default": "CreateRelease\\icon.png"        
     },
     "contributions": [
         {

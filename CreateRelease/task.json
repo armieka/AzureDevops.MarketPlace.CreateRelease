@@ -18,7 +18,6 @@
             "label": "Project",
             "defaultValue": "",
             "required": true,
-            "visibleRule": "buildType == specific",
             "properties": {
                 "EditableOptions": "True",
                 "DisableManageLink": "True"
