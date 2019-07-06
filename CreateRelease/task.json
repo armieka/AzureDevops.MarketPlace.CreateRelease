@@ -7,11 +7,19 @@
     "category": "Utility",
     "author": "S. Mooren & A. Assadourian",
     "version": {
-        "Major": 0,
-        "Minor": 1,
+        "Major": 8,
+        "Minor": 6,
         "Patch": 0
     },
     "inputs": [
+        {
+            "name": "PersonalAccessToken",
+            "type": "string",
+            "label": "token with access to release",
+            "defaultValue": "",
+            "required": true,
+            "helpMarkDown": "token"
+        },
         {
             "name": "ProjectName",
             "type": "pickList",
@@ -19,17 +27,21 @@
             "defaultValue": "",
             "required": true,
             "properties": {
-                "EditableOptions": "True",
+                "EditableOptions": "False",
                 "DisableManageLink": "True"
             },
             "helpMarkDown": "The name of the project you want to release"
         },
         {
-            "name": "ReleaseName",
-            "type": "string",
-            "label": "Release name",
+            "name": "ReleaseId",
+            "type": "pickList",
+            "label": "Release to deploy",
             "defaultValue": "",
             "required": true,
+            "properties": {
+                "EditableOptions": "False",
+                "DisableManageLink": "True"
+            },
             "helpMarkDown": "The name of the release pipeline"
         },
         {
@@ -67,6 +79,16 @@
             "callbackContextTemplate": "{\"skip\": \"{{add skip 1000}}\"}",
             "callbackRequiredTemplate": "{{isEqualNumber result.count 1000}}",
             "initialContextTemplate": "{\"skip\": \"0\"}"
+        },
+        {
+            "endpointId": "tfs:rm",
+            "target": "ReleaseId",
+            "endpointUrl": "{{endpoint.url}}/{{ProjectName}}/_apis/release/definitions?api-version=5.0&queryOrder=nameDescending",
+            "parameters": {
+                "ProjectName": "$(ProjectName)"
+            },
+            "resultSelector": "jsonpath:$.value[*]",
+            "resultTemplate": "{ \"Value\" : \"{{{id}}}\", \"DisplayValue\" : \"{{{name}}}\" }"
         }
     ],
     "execution": {
