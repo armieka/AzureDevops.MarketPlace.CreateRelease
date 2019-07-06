@@ -2,6 +2,11 @@ import * as taskLib from 'azure-pipelines-task-lib/task';
 import "isomorphic-fetch";
 import { delay } from 'q';
 
+import * as lim from "azure-devops-node-api/interfaces/LocationsInterfaces";
+import * as nodeApi from 'azure-devops-node-api';
+import * as ReleaseApi from 'azure-devops-node-api/ReleaseApi';
+import * as ReleaseInterfaces from 'azure-devops-node-api/interfaces/ReleaseInterfaces';
+
 async function GetDefinitionIdAsync(headers: HeadersInit, projectName: string, releaseName: string): Promise<number> {
     return fetch('https://vsrm.dev.azure.com/beslistnl/' + projectName + '/_apis/release/definitions?api-version=5.0&searchText=' + releaseName + '&isExactNameMatch=true',
         {
@@ -182,20 +187,52 @@ async function StartNotStartedEnvironmentAsync(headers: Headers, projectName: st
         });
 }
 
+async function getWebApi(serverUrl?: string): Promise<nodeApi.WebApi> {
+    serverUrl = serverUrl || taskLib.getInput("SYSTEM_TEAMFOUNDATIONCOLLECTIONURI");
+    console.log('url');
+    console.log(serverUrl);
+    return await getApi(serverUrl);
+}
+
+async function getApi(serverUrl: string): Promise<nodeApi.WebApi> {
+    return new Promise<nodeApi.WebApi>(async (resolve, reject) => {
+        try {
+            let token = taskLib.getInput("System.AccessToken");
+            console.log('token');
+            console.log(token);
+            let authHandler = nodeApi.getBearerHandler(token);
+            let option = undefined;
+
+            let vsts: nodeApi.WebApi = new nodeApi.WebApi(serverUrl, authHandler, option);
+            let connData: lim.ConnectionData = await vsts.connect();
+            console.log(connData);
+            resolve(vsts);
+        }
+        catch (err) {
+            reject(err);
+        }
+    });
+}
+
 async function run() {
     try {
         const projectName: string = taskLib.getInput('ProjectName', true);
-        const releaseName: string = taskLib.getInput('ReleaseName', true);
-        //const artifactEnvironment: string = taskLib.getInput('ArtifactEnvironment', true);
-        const userDefinedEnvironment: string = taskLib.getInput('Environment', true);
-        const personalAccesToken: string = taskLib.getInput('personalAccesToken', true);
-        const attributes: { [id: string]: string } = JSON.parse(taskLib.getInput('Attributes', true));
-        let token = Buffer.from(':' + personalAccesToken).toString('base64')
-        let headers: Headers = new Headers();
-        headers.set('Authorization', 'Basic ' + token);
-        headers.set('Content-Type', 'application/json');
-        let releaseId = await CreateReleaseAsync(headers, projectName, releaseName, attributes, userDefinedEnvironment);
-        await WaitForReleaseToFinishAsync(headers, projectName, releaseId, userDefinedEnvironment);
+        const releaseId: number = Number(taskLib.getInput('ReleaseId', true));
+        const webApi: nodeApi.WebApi = await getWebApi();
+        const releaseApiObject: ReleaseApi.IReleaseApi = await webApi.getReleaseApi();
+        var deployments : ReleaseInterfaces.Deployment[] = await releaseApiObject.getDeployments(projectName, releaseId);
+        console.log(deployments[0])
+        // //const artifactEnvironment: string = taskLib.getInput('ArtifactEnvironment', true);
+        // const userDefinedEnvironment: string = taskLib.getInput('Environment', true);
+        // const personalAccessToken: string = taskLib.getInput('PersonalAccessToken', true);
+        // const attributes: { [id: string]: string } = JSON.parse(taskLib.getInput('Attributes', true));
+        // let token = Buffer.from(':' + personalAccessToken).toString('base64')
+        // let headers: Headers = new Headers();
+        // headers.set('Authorization', 'Basic ' + token);
+        // headers.set('Content-Type', 'application/json');
+        // let releaseId = await CreateReleaseAsync(headers, projectName, releaseName, attributes, userDefinedEnvironment);
+        // await WaitForReleaseToFinishAsync(headers, projectName, releaseId, userDefinedEnvironment);
+
     }
     catch (err) {
         taskLib.setResult(taskLib.TaskResult.Failed, err.message);
