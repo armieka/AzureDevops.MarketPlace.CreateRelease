@@ -188,24 +188,19 @@ async function StartNotStartedEnvironmentAsync(headers: Headers, projectName: st
 }
 
 async function getWebApi(serverUrl?: string): Promise<nodeApi.WebApi> {
-    serverUrl = serverUrl || taskLib.getInput("SYSTEM_TEAMFOUNDATIONCOLLECTIONURI");
-    console.log('url');
-    console.log(serverUrl);
+    serverUrl = serverUrl || taskLib.getVariable("System.TeamFoundationCollectionUri");
     return await getApi(serverUrl);
 }
 
 async function getApi(serverUrl: string): Promise<nodeApi.WebApi> {
     return new Promise<nodeApi.WebApi>(async (resolve, reject) => {
         try {
-            let token = taskLib.getInput("System.AccessToken");
-            console.log('token');
-            console.log(token);
-            let authHandler = nodeApi.getBearerHandler(token);
+            let serverCreds: string = taskLib.getEndpointAuthorizationParameter('SYSTEMVSSCONNECTION', 'ACCESSTOKEN', false);
+            let authHandler = nodeApi.getPersonalAccessTokenHandler(serverCreds);
             let option = undefined;
 
             let vsts: nodeApi.WebApi = new nodeApi.WebApi(serverUrl, authHandler, option);
             let connData: lim.ConnectionData = await vsts.connect();
-            console.log(connData);
             resolve(vsts);
         }
         catch (err) {
@@ -220,8 +215,8 @@ async function run() {
         const releaseId: number = Number(taskLib.getInput('ReleaseId', true));
         const webApi: nodeApi.WebApi = await getWebApi();
         const releaseApiObject: ReleaseApi.IReleaseApi = await webApi.getReleaseApi();
-        var deployments : ReleaseInterfaces.Deployment[] = await releaseApiObject.getDeployments(projectName, releaseId);
-        console.log(deployments[0])
+        var deployments : ReleaseInterfaces.Deployment[] = await releaseApiObject.getDeployments(projectName, releaseId, undefined, undefined, undefined, undefined, ReleaseInterfaces.DeploymentStatus.Succeeded, undefined,undefined, ReleaseInterfaces.ReleaseQueryOrder.Descending);
+        console.log(deployments)
         // //const artifactEnvironment: string = taskLib.getInput('ArtifactEnvironment', true);
         // const userDefinedEnvironment: string = taskLib.getInput('Environment', true);
         // const personalAccessToken: string = taskLib.getInput('PersonalAccessToken', true);
