@@ -9,6 +9,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "azure-devops-node-api": "^9.0.1",
     "azure-pipelines-task-lib": "^2.8.0",
     "es6-promise": "^4.2.8",
     "isomorphic-fetch": "^2.2.1",
