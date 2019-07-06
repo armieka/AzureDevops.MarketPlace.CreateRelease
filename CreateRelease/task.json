@@ -7,8 +7,8 @@
     "category": "Utility",
     "author": "S. Mooren & A. Assadourian",
     "version": {
-        "Major": 8,
-        "Minor": 27,
+        "Major": 9,
+        "Minor": 3,
         "Patch": 0
     },
     "inputs": [
@@ -46,7 +46,7 @@
                 "EditableOptions": "False",
                 "DisableManageLink": "True"
             },
-            "helpMarkDown": "The name of the release pipeline"
+            "helpMarkDown": "ReleaseEnvironment to get build artifact from"
         }
     ],
     "dataSourceBindings": [
