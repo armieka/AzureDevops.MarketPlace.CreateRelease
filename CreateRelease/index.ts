@@ -7,52 +7,31 @@ import * as nodeApi from 'azure-devops-node-api';
 import * as ReleaseApi from 'azure-devops-node-api/ReleaseApi';
 import * as ReleaseInterfaces from 'azure-devops-node-api/interfaces/ReleaseInterfaces';
 
-async function GetDefinitionIdAsync(headers: HeadersInit, projectName: string, releaseName: string): Promise<number> {
-    return fetch('https://vsrm.dev.azure.com/beslistnl/' + projectName + '/_apis/release/definitions?api-version=5.0&searchText=' + releaseName + '&isExactNameMatch=true',
-        {
-            headers: headers,
-            method: 'GET'
-        })
-        .then(function (response) {
-            if (response.ok) {
-                return response.json();
-            }
-            throw Error(response.statusText);
-        })
-        .then(function (jsonResult) {
-            if (jsonResult.count != 1) {
-                throw Error('to many release definitions');
-            }
-            else {
-                return jsonResult.value[0].id;
-            }
-        });
-}
-
-async function GetBuildArtifactAsync(headers: HeadersInit, projectName: string, definitionId: number): Promise<string> {
-    let result = await fetch('https://vsrm.dev.azure.com/beslistnl/' + projectName + '/_apis/release/deployments?api-version=5.0&query+Order=descending&deploymentStatus=succeeded&definitionId=' + definitionId,
-        {
-            headers: headers,
-            method: 'GET'
-        }).then(function (response) {
-            if (response.ok) {
-                return response.json();
-            }
-            throw Error(response.statusText);
-        }).then(function (jsonResult) {
-            let result: { [name: string]: string } = jsonResult.value.reduce(function (artifacts: { [name: string]: string }, deploymentType: any) {
-                artifacts[deploymentType.releaseEnvironment.name] = '"artifacts": [' + deploymentType.release.artifacts.map(function (artifact: any) {
-                    return '{ "alias": "' + artifact.alias + '",' +
+async function GetBuildArtifactAsync(releaseApiObject: ReleaseApi.IReleaseApi, projectName: string, releaseId: number, releaseEnvironmentId: number): Promise<string> {
+    var deployments: ReleaseInterfaces.Deployment[] = await releaseApiObject.getDeployments(projectName, releaseId, releaseEnvironmentId, undefined, undefined, undefined, ReleaseInterfaces.DeploymentStatus.Succeeded, undefined, undefined, ReleaseInterfaces.ReleaseQueryOrder.Descending);
+    var artifacts = '"artifacts": [';
+    if (deployments.length == 0) {
+        //get latest build or something
+    }
+    else {
+        let release = deployments[0].release;
+        if (release && release.artifacts && release.artifacts.length > 0) {
+            artifacts += release.artifacts.reduce(function (result: string[], artifact: ReleaseInterfaces.Artifact) {
+                let definitionReference = artifact.definitionReference;
+                if (definitionReference) {
+                    result.push('{ "alias": "' + artifact.alias + '",' +
                         '"instanceReference": {' +
-                        '"name": "' + artifact.definitionReference.version.name + '",' +
-                        '"id": "' + artifact.definitionReference.version.id + '"}' +
-                        '}';
-                }).join(',') + ']';
-                return artifacts;
-            }, {});
-            return result;
-        });
-    return result[Object.keys(result)[0]] ? result[Object.keys(result)[0]] : "\"artifacts\": []";//return specified environment
+                        '"name": "' + definitionReference.version.name + '",' +
+                        '"id": "' + definitionReference.version.id + '"}' +
+                        '}');
+                }
+                return result;
+            }, []).join(',');
+        }
+        artifacts += ']';
+    }
+    return artifacts;
+
 }
 
 async function GetEnvironmentsAsync(headers: HeadersInit, projectName: string, definitionId: number, environmentName: string): Promise<string> {
@@ -93,25 +72,25 @@ function CreateReleaseBody(definitionId: number, manualEnvironments: string, art
         '"manualEnvironments": [' + manualEnvironments + ']}';
 }
 
-async function CreateReleaseAsync(headers: Headers, projectName: string, releaseName: string, attributes: { [id: string]: string }, userDefinedEnvironment: string): Promise<number> {
+async function CreateReleaseAsync(releaseApiObject: ReleaseApi.IReleaseApi, projectName: string, releaseId: number, releaseEnvironmentId: number): Promise<number> {
 
-    let definitionId = await GetDefinitionIdAsync(headers, projectName, releaseName);
-    let buildArtifact = await GetBuildArtifactAsync(headers, projectName, definitionId);
-    let environments = await GetEnvironmentsAsync(headers, projectName, definitionId, userDefinedEnvironment);
-    let releaseBody = CreateReleaseBody(definitionId, environments, buildArtifact, attributes);
-    return fetch('https://vsrm.dev.azure.com/beslistnl/' + projectName + '/_apis/release/releases?api-version=5.0',
-        {
-            headers: headers,
-            method: 'POST',
-            body: releaseBody
-        }).then(function (response) {
-            if (response.ok) {
-                return response.json();
-            }
-            throw Error(response.statusText);
-        }).then(function (jsonResult) {
-            return jsonResult.id;
-        });
+    let buildArtifact = await GetBuildArtifactAsync(releaseApiObject, projectName, releaseId, releaseEnvironmentId);
+    // let environments = await GetEnvironmentsAsync(headers, projectName, definitionId, userDefinedEnvironment);
+    // let releaseBody = CreateReleaseBody(definitionId, environments, buildArtifact, attributes);
+    return 1;
+    // return fetch('https://vsrm.dev.azure.com/beslistnl/' + projectName + '/_apis/release/releases?api-version=5.0',
+    //     {
+    //         headers: headers,
+    //         method: 'POST',
+    //         body: releaseBody
+    //     }).then(function (response) {
+    //         if (response.ok) {
+    //             return response.json();
+    //         }
+    //         throw Error(response.statusText);
+    //     }).then(function (jsonResult) {
+    //         return jsonResult.id;
+    //     });
 }
 
 async function WaitForReleaseToFinishAsync(headers: Headers, projectName: string, releaseId: number, userDefinedEnvironment: string) {
@@ -213,10 +192,10 @@ async function run() {
     try {
         const projectName: string = taskLib.getInput('ProjectName', true);
         const releaseId: number = Number(taskLib.getInput('ReleaseId', true));
+        const releaseEnvironmentId: number = Number(taskLib.getInput('ReleaseEnvironmentId', true));
         const webApi: nodeApi.WebApi = await getWebApi();
+
         const releaseApiObject: ReleaseApi.IReleaseApi = await webApi.getReleaseApi();
-        var deployments : ReleaseInterfaces.Deployment[] = await releaseApiObject.getDeployments(projectName, releaseId, undefined, undefined, undefined, undefined, ReleaseInterfaces.DeploymentStatus.Succeeded, undefined,undefined, ReleaseInterfaces.ReleaseQueryOrder.Descending);
-        console.log(deployments)
         // //const artifactEnvironment: string = taskLib.getInput('ArtifactEnvironment', true);
         // const userDefinedEnvironment: string = taskLib.getInput('Environment', true);
         // const personalAccessToken: string = taskLib.getInput('PersonalAccessToken', true);

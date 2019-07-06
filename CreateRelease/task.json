@@ -8,18 +8,10 @@
     "author": "S. Mooren & A. Assadourian",
     "version": {
         "Major": 8,
-        "Minor": 6,
+        "Minor": 27,
         "Patch": 0
     },
     "inputs": [
-        {
-            "name": "PersonalAccessToken",
-            "type": "string",
-            "label": "token with access to release",
-            "defaultValue": "",
-            "required": true,
-            "helpMarkDown": "token"
-        },
         {
             "name": "ProjectName",
             "type": "pickList",
@@ -45,28 +37,16 @@
             "helpMarkDown": "The name of the release pipeline"
         },
         {
-            "name": "ArtifactEnvironment",
-            "type": "string",
-            "label": "Artifact environment",
+            "name": "ReleaseEnvironmentId",
+            "type": "pickList",
+            "label": "ReleaseEnvironment to get build artifact from",
             "defaultValue": "",
             "required": true,
-            "helpMarkDown": "The name of the environment to get the currently deployed artifact from"
-        },
-        {
-            "name": "Environment",
-            "type": "string",
-            "label": "Environment",
-            "defaultValue": "",
-            "required": true,
-            "helpMarkDown": "The environment to deploy"
-        },
-        {
-            "name": "Attributes",
-            "type": "string",
-            "label": "Attributes",
-            "defaultValue": "",
-            "required": true,
-            "helpMarkDown": "Attributes to provide as input variables when creating the release"
+            "properties": {
+                "EditableOptions": "False",
+                "DisableManageLink": "True"
+            },
+            "helpMarkDown": "The name of the release pipeline"
         }
     ],
     "dataSourceBindings": [
@@ -88,6 +68,17 @@
                 "ProjectName": "$(ProjectName)"
             },
             "resultSelector": "jsonpath:$.value[*]",
+            "resultTemplate": "{ \"Value\" : \"{{{id}}}\", \"DisplayValue\" : \"{{{name}}}\" }"
+        },
+        {
+            "endpointId": "tfs:rm",
+            "target": "ReleaseEnvironmentId",
+            "endpointUrl": "{{endpoint.url}}/{{ProjectName}}/_apis/release/definitions/{{ReleaseId}}?api-version=5.0",
+            "parameters": {
+                "ProjectName": "$(ProjectName)",
+                "ReleaseId": "$(ReleaseId)"
+            },
+            "resultSelector": "jsonpath:$.environments[*]",
             "resultTemplate": "{ \"Value\" : \"{{{id}}}\", \"DisplayValue\" : \"{{{name}}}\" }"
         }
     ],
