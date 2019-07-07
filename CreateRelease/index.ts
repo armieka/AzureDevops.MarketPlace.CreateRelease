@@ -151,11 +151,13 @@ async function getWebApi(serverUrl?: string): Promise<nodeApi.WebApi> {
 async function getApi(serverUrl: string): Promise<nodeApi.WebApi> {
     return new Promise<nodeApi.WebApi>(async (resolve, reject) => {
         try {
-            let serverCreds: string = taskLib.getEndpointAuthorizationParameter('SYSTEMVSSCONNECTION', 'ACCESSTOKEN', false);
-            let authHandler = nodeApi.getPersonalAccessTokenHandler(serverCreds);
+            //let serverCreds: string = taskLib.getEndpointAuthorizationParameter('SYSTEMVSSCONNECTION', 'ACCESSTOKEN', false);
+            //let authHandler = nodeApi.getPersonalAccessTokenHandler(serverCreds);
             let option = undefined;
-
-            let vsts: nodeApi.WebApi = new nodeApi.WebApi(serverUrl, authHandler, option);
+            let token = taskLib.getVariable('System.AccessToken');
+            let personalAccessToken = nodeApi.getPersonalAccessTokenHandler(token);
+            console.log(personalAccessToken);
+            let vsts: nodeApi.WebApi = new nodeApi.WebApi(serverUrl, personalAccessToken, option);
             let connData: lim.ConnectionData = await vsts.connect();
             resolve(vsts);
         }

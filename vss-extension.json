@@ -3,7 +3,7 @@
     "id": "create-release",
     "name": " Tool to create a release",
     "tags": ["pipeline", "deploy", "release"],
-    "version": "9.0.3",
+    "version": "9.0.4",
     "publisher": "SietseMoorenBeslist",
     "targets": [
         {
