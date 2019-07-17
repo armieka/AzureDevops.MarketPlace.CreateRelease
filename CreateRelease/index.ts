@@ -49,7 +49,6 @@ async function GetEnvironmentsAsync(releaseApiObject: ReleaseApi.IReleaseApi, pr
 function CreateReleaseBody(definitionId: number, manualEnvironments: string[], artifacts: ReleaseInterfaces.ArtifactMetadata[], attributes: { [id: string]: string }): ReleaseInterfaces.ReleaseStartMetadata {
 
     let releaseStartMetaData: ReleaseInterfaces.ReleaseStartMetadata = {};
-
     releaseStartMetaData.description = 'triggered by integration test';
     releaseStartMetaData.definitionId = definitionId;
     releaseStartMetaData.isDraft = false;
@@ -161,7 +160,6 @@ async function run() {
         const releaseApiObject: ReleaseApi.IReleaseApi = await webApi.getReleaseApi();
         let release = await CreateReleaseAsync(releaseApiObject, projectName, releaseId, artifactEnvironmentId, releaseEnvironmentId, attributes);
         await WaitForReleaseToFinishAsync( releaseApiObject, projectName,release, releaseEnvironmentId);
-        // example inputs {projectName: webshops offer, releaseId:23, releaseEnvironmentId: 69,artifactEnvironmentId:68, Attributes: {}}
     }
     catch (err) {
         taskLib.setResult(taskLib.TaskResult.Failed, err.message);
