@@ -1,5 +1,4 @@
 import * as taskLib from 'azure-pipelines-task-lib/task';
-import "isomorphic-fetch";
 import { delay } from 'q';
 
 import * as lim from "azure-devops-node-api/interfaces/LocationsInterfaces";
@@ -7,17 +6,26 @@ import * as nodeApi from 'azure-devops-node-api';
 import * as ReleaseApi from 'azure-devops-node-api/ReleaseApi';
 import * as ReleaseInterfaces from 'azure-devops-node-api/interfaces/ReleaseInterfaces';
 
-async function GetBuildArtifactAsync(releaseApiObject: ReleaseApi.IReleaseApi, projectName: string, releaseDefinitionId: number, releaseEnvironmentId: number): Promise<ReleaseInterfaces.ArtifactMetadata[]> {
-    var deployments: ReleaseInterfaces.Deployment[] = await releaseApiObject.getDeployments(projectName, releaseDefinitionId, releaseEnvironmentId, undefined, undefined, undefined, ReleaseInterfaces.DeploymentStatus.Succeeded, undefined, undefined, ReleaseInterfaces.ReleaseQueryOrder.Descending);
-    var artifacts: ReleaseInterfaces.ArtifactMetadata[] = [];
+async function GetBuildArtifactAsync(releaseApiObject: ReleaseApi.IReleaseApi, projectName: string, releaseDefinitionId: number, artifactEnvironmentId: number): Promise<ReleaseInterfaces.ArtifactMetadata[]> {
+    var deployments: ReleaseInterfaces.Deployment[] = await releaseApiObject.getDeployments(projectName, releaseDefinitionId, artifactEnvironmentId, undefined, undefined, undefined, ReleaseInterfaces.DeploymentStatus.Succeeded, undefined, undefined, ReleaseInterfaces.ReleaseQueryOrder.Descending);
     if (deployments.length == 0) {
         return []
         //get latest build or something
     }
     else {
         let release = deployments[0].release;
-        if (release && release.artifacts && release.artifacts.length > 0) {
-            return release.artifacts;
+        if (release && release.artifacts) {
+            return release.artifacts.map(function(artifact : ReleaseInterfaces.Artifact){
+                let artifactMetaData : ReleaseInterfaces.ArtifactMetadata = {};
+                artifactMetaData.alias = artifact.alias;
+                if(artifact.definitionReference){
+                    let instanceReference : ReleaseInterfaces.BuildVersion = {};
+                    instanceReference.id = artifact.definitionReference['version'].id
+                    instanceReference.name = artifact.definitionReference['version'].name
+                    artifactMetaData.instanceReference = instanceReference;
+                }
+                return artifactMetaData;
+            });
         }
     }
     return [];
@@ -31,7 +39,7 @@ async function GetEnvironmentsAsync(releaseApiObject: ReleaseApi.IReleaseApi, pr
     if (releaseEnvironments && releaseEnvironments.length > 0) {
         return releaseEnvironments.reduce(function (x: string[], environment: any) {
             if (environment.id != releaseEnvironmentId) {
-                x.push('\"' + environment.name + '\"');
+                x.push(environment.name);
             }
             return x;
         }, []);
@@ -59,88 +67,66 @@ function CreateReleaseBody(definitionId: number, manualEnvironments: string[], a
     return releaseStartMetaData;
 }
 
-async function CreateReleaseAsync(releaseApiObject: ReleaseApi.IReleaseApi, projectName: string, releaseDefinitionId: number, releaseEnvironmentId: number, attributes: { [id: string]: string }): Promise<ReleaseInterfaces.Release> {
+async function CreateReleaseAsync(releaseApiObject: ReleaseApi.IReleaseApi, projectName: string, releaseDefinitionId: number, artifactEnvironmentId: number, releaseEnvironmentId: number, attributes: { [id: string]: string }): Promise<ReleaseInterfaces.Release> {
 
-    let buildArtifact = await GetBuildArtifactAsync(releaseApiObject, projectName, releaseDefinitionId, releaseEnvironmentId);
-    console.log(buildArtifact);
+    let buildArtifact = await GetBuildArtifactAsync(releaseApiObject, projectName, releaseDefinitionId, artifactEnvironmentId);
     let manualEnvironments = await GetEnvironmentsAsync(releaseApiObject, projectName, releaseDefinitionId, releaseEnvironmentId);
-    console.log(manualEnvironments);
     let releaseBody = CreateReleaseBody(releaseDefinitionId, manualEnvironments, buildArtifact, attributes);
-    console.log(releaseBody);
     return await releaseApiObject.createRelease(releaseBody, projectName)
 }
 
-async function WaitForReleaseToFinishAsync(headers: Headers, projectName: string, releaseId: number, userDefinedEnvironment: string) {
+async function WaitForReleaseToFinishAsync(releaseApiObject: ReleaseApi.IReleaseApi, projectName: string, release: ReleaseInterfaces.Release, releaseEnvironmentId: number) {
 
     let finished = false;
-    let uri = 'https://vsrm.dev.azure.com/beslistnl/' + projectName + '/_apis/release/releases/' + releaseId + '?api-version=5.0';
     while (!finished) {
-        finished = await fetch(uri,
-            {
-                headers: headers,
-                method: 'GET'
-            }).then(function (response) {
-                if (response.ok) {
-                    return response.json();
-                }
-                throw Error(response.statusText);
-            }).then(function (jsonResult) {
-                return jsonResult.environments.reduce(async function (x: boolean, environment: any) {
-                    if (environment.name == userDefinedEnvironment) {
+        if(release.id){
+            let releaseId : number = release.id;
+            var releaseStatus = await releaseApiObject.getRelease(projectName, release.id);
+            if(releaseStatus.environments){
+                finished = await releaseStatus.environments.reduce(async function (x: Promise<boolean>, environment: ReleaseInterfaces.ReleaseEnvironment) {
+                    if (environment.definitionEnvironmentId == releaseEnvironmentId) {
                         let status = environment.status;
-                        if (status == 'notStarted') {
-                            await StartNotStartedEnvironmentAsync(headers, projectName, releaseId, userDefinedEnvironment);
+                        if (status == ReleaseInterfaces.EnvironmentStatus.NotStarted) {
+                            await StartNotStartedEnvironmentAsync(releaseApiObject, projectName, releaseId, GetReleaseEnvironmentId(release, releaseEnvironmentId));
                         }
-                        else if (status != 'canceled' && status != 'partiallySucceeded' && status != 'rejected' && status != 'succeeded') {
+                        else if (status != ReleaseInterfaces.EnvironmentStatus.Canceled && 
+                            status != ReleaseInterfaces.EnvironmentStatus.PartiallySucceeded && 
+                            status != ReleaseInterfaces.EnvironmentStatus.Rejected && 
+                            status != ReleaseInterfaces.EnvironmentStatus.Succeeded) {
                             await delay(3000);
                         }
                         else {
-                            x = true;
+                            x = new Promise<boolean>(resolve => true);
                         }
                     }
                     return x;
-                }, false);
-            });
+                }, new Promise<boolean>(resolve => false));
+            }
+        }
     }
 }
 
-async function GetReleaseEnvironmentIdAsync(headers: Headers, projectName: string, releaseId: number, userDefinedEnvironment: string): Promise<number> {
-
-    return fetch('https://vsrm.dev.azure.com/beslistnl/' + projectName + '/_apis/release/releases/' + releaseId + '?api-version=5.0',
-        {
-            headers: headers,
-            method: 'GET'
-        }).then(function (response) {
-            if (response.ok) {
-                return response.json();
+function GetReleaseEnvironmentId(release: ReleaseInterfaces.Release, releaseEnvironmentId: number) : number {
+    if (release.environments) {
+        let result = release.environments.reduce(function (x: number | undefined, environment: ReleaseInterfaces.ReleaseEnvironment) {
+            if (environment.definitionEnvironmentId == releaseEnvironmentId) {
+                x = environment.id;
             }
-            throw Error(response.statusText);
-        }).then(function (jsonResult) {
-            return jsonResult.environments.reduce(function (x: { [id: string]: string }, environment: any) {
-                x[environment.name] = environment.id;
-                return x;
-            }, {})[userDefinedEnvironment];
-        });
+            return x;
+        }, undefined);
+        if (result) {
+            return result;
+        }
+    }
+    throw Error("no id found"); 
 }
 
-async function StartNotStartedEnvironmentAsync(headers: Headers, projectName: string, releaseId: number, userDefinedEnvironment: string) {
-
-    let environmentId = await GetReleaseEnvironmentIdAsync(headers, projectName, releaseId, userDefinedEnvironment);
-    let releaseBody = '{"status": "inProgress",' +
-        '"scheduledDeploymentTime": null,' +
-        '"comment": "triggered by integration test"}';
-    await fetch('https://vsrm.dev.azure.com/beslistnl/' + projectName + '/_apis/release/releases/' + releaseId + '/environments/' + environmentId + '?api-version=5.1-preview.6',
-        {
-            headers: headers,
-            method: 'PATCH',
-            body: releaseBody
-        }).then(async function (response) {
-            if (response.ok) {
-                await delay(3000);
-                return;
-            }
-            throw Error(response.statusText);
-        });
+async function StartNotStartedEnvironmentAsync(releaseApiObject: ReleaseApi.IReleaseApi, projectName: string, releaseId: number, releaseEnvironmentId: number): Promise<ReleaseInterfaces.ReleaseEnvironment> { 
+    let environmentUpdateData: ReleaseInterfaces.ReleaseEnvironmentUpdateMetadata = {}
+    environmentUpdateData.status = ReleaseInterfaces.EnvironmentStatus.InProgress;
+    environmentUpdateData.scheduledDeploymentTime = undefined;
+    environmentUpdateData.comment = "triggered by integration test";
+    return await releaseApiObject.updateReleaseEnvironment(environmentUpdateData,projectName, releaseId, releaseEnvironmentId);
 }
 
 async function getWebApi(serverUrl?: string): Promise<nodeApi.WebApi> {
@@ -151,13 +137,14 @@ async function getWebApi(serverUrl?: string): Promise<nodeApi.WebApi> {
 async function getApi(serverUrl: string): Promise<nodeApi.WebApi> {
     return new Promise<nodeApi.WebApi>(async (resolve, reject) => {
         try {
-            //let serverCreds: string = taskLib.getEndpointAuthorizationParameter('SYSTEMVSSCONNECTION', 'ACCESSTOKEN', false);
-            //let authHandler = nodeApi.getPersonalAccessTokenHandler(serverCreds);
+            // let serverCreds: string = taskLib.getInput('token', true);
+            // let authHandler = nodeApi.getPersonalAccessTokenHandler(serverCreds);
+            let serverCreds: string = taskLib.getEndpointAuthorizationParameter('SYSTEMVSSCONNECTION', 'ACCESSTOKEN', false);
+            let authHandler = nodeApi.getPersonalAccessTokenHandler(serverCreds);
             let option = undefined;
-            let token = taskLib.getVariable('System.AccessToken');
-            let personalAccessToken = nodeApi.getPersonalAccessTokenHandler(token);
-            console.log(personalAccessToken);
-            let vsts: nodeApi.WebApi = new nodeApi.WebApi(serverUrl, personalAccessToken, option);
+            // let token = taskLib.getVariable('System.AccessToken');
+            // let personalAccessToken = nodeApi.getPersonalAccessTokenHandler(token);
+            let vsts: nodeApi.WebApi = new nodeApi.WebApi(serverUrl, authHandler, option);
             let connData: lim.ConnectionData = await vsts.connect();
             resolve(vsts);
         }
@@ -170,25 +157,17 @@ async function getApi(serverUrl: string): Promise<nodeApi.WebApi> {
 async function run() {
     try {
         const projectName: string = taskLib.getInput('ProjectName', true);
-        const releaseDefinitionId: number = Number(taskLib.getInput('ReleaseId', true));
+        const releaseId: number = Number(taskLib.getInput('ReleaseId', true));
         const releaseEnvironmentId: number = Number(taskLib.getInput('ReleaseEnvironmentId', true));
+        const artifactEnvironmentId: number = Number(taskLib.getInput('ArtifactEnvironmentId', true));
+        const attributes: { [id: string]: string } = JSON.parse(taskLib.getInput('Attributes', true));
         const webApi: nodeApi.WebApi = await getWebApi();
 
         const releaseApiObject: ReleaseApi.IReleaseApi = await webApi.getReleaseApi();
-        let release = await CreateReleaseAsync(releaseApiObject, projectName, releaseDefinitionId, releaseEnvironmentId, {});
+        let release = await CreateReleaseAsync(releaseApiObject, projectName, releaseId, artifactEnvironmentId, releaseEnvironmentId, attributes);
         console.log(release);
-
-        // //const artifactEnvironment: string = taskLib.getInput('ArtifactEnvironment', true);
-        // const userDefinedEnvironment: string = taskLib.getInput('Environment', true);
-        // const personalAccessToken: string = taskLib.getInput('PersonalAccessToken', true);
-        // const attributes: { [id: string]: string } = JSON.parse(taskLib.getInput('Attributes', true));
-        // let token = Buffer.from(':' + personalAccessToken).toString('base64')
-        // let headers: Headers = new Headers();
-        // headers.set('Authorization', 'Basic ' + token);
-        // headers.set('Content-Type', 'application/json');
-        // let releaseId = await CreateReleaseAsync(headers, projectName, releaseName, attributes, userDefinedEnvironment);
-        // await WaitForReleaseToFinishAsync(headers, projectName, releaseId, userDefinedEnvironment);
-
+        await WaitForReleaseToFinishAsync( releaseApiObject, projectName,release, releaseEnvironmentId);
+        // example inputs {projectName: webshops offer, releaseId:23, releaseEnvironmentId: 69,artifactEnvironmentId:68, Attributes: {}}
     }
     catch (err) {
         taskLib.setResult(taskLib.TaskResult.Failed, err.message);

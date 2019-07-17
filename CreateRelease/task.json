@@ -8,7 +8,7 @@
     "author": "S. Mooren & A. Assadourian",
     "version": {
         "Major": 9,
-        "Minor": 4,
+        "Minor": 10,
         "Patch": 0
     },
     "inputs": [
@@ -39,14 +39,34 @@
         {
             "name": "ReleaseEnvironmentId",
             "type": "pickList",
-            "label": "ReleaseEnvironment to get build artifact from",
+            "label": "ReleaseEnvironment to run",
             "defaultValue": "",
             "required": true,
             "properties": {
                 "EditableOptions": "False",
                 "DisableManageLink": "True"
             },
-            "helpMarkDown": "ReleaseEnvironment to get build artifact from"
+            "helpMarkDown": "ReleaseEnvironment to run"
+        },
+        {
+            "name": "ArtifactEnvironmentId",
+            "type": "pickList",
+            "label": "ReleaseEnvironment to get build artifacts from",
+            "defaultValue": "",
+            "required": true,
+            "properties": {
+                "EditableOptions": "False",
+                "DisableManageLink": "True"
+            },
+            "helpMarkDown": "ReleaseEnvironment to get build artifacts from"
+        },
+        {
+            "name": "Attributes",
+            "type": "string",
+            "label": "Attributes to pass to release",
+            "defaultValue": "{}",
+            "required": false,
+            "helpMarkDown": "Attributes to pass to release"
         }
     ],
     "dataSourceBindings": [
@@ -73,6 +93,17 @@
         {
             "endpointId": "tfs:rm",
             "target": "ReleaseEnvironmentId",
+            "endpointUrl": "{{endpoint.url}}/{{ProjectName}}/_apis/release/definitions/{{ReleaseId}}?api-version=5.0",
+            "parameters": {
+                "ProjectName": "$(ProjectName)",
+                "ReleaseId": "$(ReleaseId)"
+            },
+            "resultSelector": "jsonpath:$.environments[*]",
+            "resultTemplate": "{ \"Value\" : \"{{{id}}}\", \"DisplayValue\" : \"{{{name}}}\" }"
+        },
+        {
+            "endpointId": "tfs:rm",
+            "target": "ArtifactEnvironmentId",
             "endpointUrl": "{{endpoint.url}}/{{ProjectName}}/_apis/release/definitions/{{ReleaseId}}?api-version=5.0",
             "parameters": {
                 "ProjectName": "$(ProjectName)",
