@@ -9,7 +9,6 @@ async function GetBuildArtifactAsync(releaseApiObject: ReleaseApi.IReleaseApi, p
     var deployments: ReleaseInterfaces.Deployment[] = await releaseApiObject.getDeployments(projectName, releaseDefinitionId, artifactEnvironmentId, undefined, undefined, undefined, ReleaseInterfaces.DeploymentStatus.Succeeded, undefined, undefined, ReleaseInterfaces.ReleaseQueryOrder.Descending);
     if (deployments.length == 0) {
         return []
-        //get latest build or something
     }
     else {
         let release = deployments[0].release;
