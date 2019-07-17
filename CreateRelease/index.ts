@@ -1,7 +1,6 @@
 import * as taskLib from 'azure-pipelines-task-lib/task';
 import { delay } from 'q';
 
-import * as lim from "azure-devops-node-api/interfaces/LocationsInterfaces";
 import * as nodeApi from 'azure-devops-node-api';
 import * as ReleaseApi from 'azure-devops-node-api/ReleaseApi';
 import * as ReleaseInterfaces from 'azure-devops-node-api/interfaces/ReleaseInterfaces';
@@ -83,27 +82,29 @@ async function WaitForReleaseToFinishAsync(releaseApiObject: ReleaseApi.IRelease
             let releaseId : number = release.id;
             var releaseStatus = await releaseApiObject.getRelease(projectName, release.id);
             if(releaseStatus.environments){
-                finished = await releaseStatus.environments.reduce(async function (x: Promise<boolean>, environment: ReleaseInterfaces.ReleaseEnvironment) {
-                    if (environment.definitionEnvironmentId == releaseEnvironmentId) {
-                        let status = environment.status;
-                        if (status == ReleaseInterfaces.EnvironmentStatus.NotStarted) {
-                            await StartNotStartedEnvironmentAsync(releaseApiObject, projectName, releaseId, GetReleaseEnvironmentId(release, releaseEnvironmentId));
-                        }
-                        else if (status != ReleaseInterfaces.EnvironmentStatus.Canceled && 
-                            status != ReleaseInterfaces.EnvironmentStatus.PartiallySucceeded && 
-                            status != ReleaseInterfaces.EnvironmentStatus.Rejected && 
-                            status != ReleaseInterfaces.EnvironmentStatus.Succeeded) {
-                            await delay(3000);
-                        }
-                        else {
-                            x = new Promise<boolean>(resolve => true);
-                        }
-                    }
-                    return x;
-                }, new Promise<boolean>(resolve => false));
+                finished = await GetReleaseStatus(releaseStatus.environments, releaseEnvironmentId, releaseApiObject, projectName, releaseId, release);
             }
         }
     }
+}
+
+async function GetReleaseStatus(environments: ReleaseInterfaces.ReleaseEnvironment[], releaseEnvironmentId: number, releaseApiObject: ReleaseApi.IReleaseApi, projectName: string, releaseId: number, release: ReleaseInterfaces.Release): Promise<boolean> {
+    return await environments.reduce(async function (x: Promise<boolean>, environment: ReleaseInterfaces.ReleaseEnvironment) {
+        if (environment.definitionEnvironmentId == releaseEnvironmentId) {
+            let status = environment.status;
+            if (status == ReleaseInterfaces.EnvironmentStatus.NotStarted) {
+                await StartNotStartedEnvironmentAsync(releaseApiObject, projectName, releaseId, GetReleaseEnvironmentId(release, releaseEnvironmentId));
+            }
+            else if (status == ReleaseInterfaces.EnvironmentStatus.Canceled ||
+                status == ReleaseInterfaces.EnvironmentStatus.PartiallySucceeded ||
+                status == ReleaseInterfaces.EnvironmentStatus.Rejected ||
+                status == ReleaseInterfaces.EnvironmentStatus.Succeeded) {
+                x = Promise.resolve(true);
+            }
+            await delay(3000);
+        }
+        return x;
+    }, Promise.resolve(false));
 }
 
 function GetReleaseEnvironmentId(release: ReleaseInterfaces.Release, releaseEnvironmentId: number) : number {
@@ -137,15 +138,10 @@ async function getWebApi(serverUrl?: string): Promise<nodeApi.WebApi> {
 async function getApi(serverUrl: string): Promise<nodeApi.WebApi> {
     return new Promise<nodeApi.WebApi>(async (resolve, reject) => {
         try {
-            // let serverCreds: string = taskLib.getInput('token', true);
-            // let authHandler = nodeApi.getPersonalAccessTokenHandler(serverCreds);
             let serverCreds: string = taskLib.getEndpointAuthorizationParameter('SYSTEMVSSCONNECTION', 'ACCESSTOKEN', false);
             let authHandler = nodeApi.getPersonalAccessTokenHandler(serverCreds);
             let option = undefined;
-            // let token = taskLib.getVariable('System.AccessToken');
-            // let personalAccessToken = nodeApi.getPersonalAccessTokenHandler(token);
             let vsts: nodeApi.WebApi = new nodeApi.WebApi(serverUrl, authHandler, option);
-            let connData: lim.ConnectionData = await vsts.connect();
             resolve(vsts);
         }
         catch (err) {
@@ -165,7 +161,6 @@ async function run() {
 
         const releaseApiObject: ReleaseApi.IReleaseApi = await webApi.getReleaseApi();
         let release = await CreateReleaseAsync(releaseApiObject, projectName, releaseId, artifactEnvironmentId, releaseEnvironmentId, attributes);
-        console.log(release);
         await WaitForReleaseToFinishAsync( releaseApiObject, projectName,release, releaseEnvironmentId);
         // example inputs {projectName: webshops offer, releaseId:23, releaseEnvironmentId: 69,artifactEnvironmentId:68, Attributes: {}}
     }
